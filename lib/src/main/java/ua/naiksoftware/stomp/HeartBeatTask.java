@@ -66,14 +66,14 @@ public class HeartBeatTask {
             case StompCommand.MESSAGE:
                 //a MESSAGE works as an hear-beat too.
                 lastServerHeartBeat = System.currentTimeMillis();
-                abortServerHeartBeatCheck();
+//                abortServerHeartBeatCheck();
                 break;
 
             case StompCommand.UNKNOWN:
                 if ("\n".equals(message.getPayload())) {
                     lastServerHeartBeat = System.currentTimeMillis();
                     Log.d(TAG, "<<< PONG");
-                    abortServerHeartBeatCheck();
+//                    abortServerHeartBeatCheck();
                     return false;
                 }
                 break;
