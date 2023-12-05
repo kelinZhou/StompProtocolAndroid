@@ -60,16 +60,18 @@ public class HeartBeatTask {
                 break;
 
             case StompCommand.SEND:
-                abortClientHeartBeatSend();
+//                abortClientHeartBeatSend();
                 break;
 
             case StompCommand.MESSAGE:
                 //a MESSAGE works as an hear-beat too.
+                lastServerHeartBeat = System.currentTimeMillis();
                 abortServerHeartBeatCheck();
                 break;
 
             case StompCommand.UNKNOWN:
                 if ("\n".equals(message.getPayload())) {
+                    lastServerHeartBeat = System.currentTimeMillis();
                     Log.d(TAG, "<<< PONG");
                     abortServerHeartBeatCheck();
                     return false;
@@ -80,11 +82,11 @@ public class HeartBeatTask {
     }
 
     public void shutdown() {
-        if (clientSendHeartBeatTask != null) {
+        if (clientSendHeartBeatTask != null && !clientSendHeartBeatTask.isDisposed()) {
             clientSendHeartBeatTask.dispose();
         }
 
-        if (serverCheckHeartBeatTask != null) {
+        if (serverCheckHeartBeatTask != null && !serverCheckHeartBeatTask.isDisposed()) {
             serverCheckHeartBeatTask.dispose();
         }
 
@@ -113,26 +115,25 @@ public class HeartBeatTask {
             if (clientHeartbeat > 0) {
                 //client MUST/WANT send heart-beat
                 Log.d(TAG, "Client will send heart-beat every " + clientHeartbeat + " ms");
-                scheduleClientHeartBeat();
+//                scheduleClientHeartBeat();
+                abortClientHeartBeatSend();
             }
             if (serverHeartbeat > 0) {
                 Log.d(TAG, "Client will listen to server heart-beat every " + serverHeartbeat + " ms");
-                //client WANT to listen to server heart-beat
-                scheduleServerHeartBeatCheck();
-
                 // initialize the server heartbeat
                 lastServerHeartBeat = System.currentTimeMillis();
+                //client WANT to listen to server heart-beat
+//                scheduleServerHeartBeatCheck();
+                abortServerHeartBeatCheck();
             }
         }
     }
 
     private void scheduleServerHeartBeatCheck() {
         if (serverHeartbeat > 0 && scheduler != null) {
-            final long now = System.currentTimeMillis();
-            Log.d(TAG, "Scheduling server heart-beat to be checked in " + serverHeartbeat + " ms and now is '" + now + "'");
+            Log.d(TAG, "Scheduling server heart-beat to be checked in " + serverHeartbeat + " ms and now is '" + System.currentTimeMillis() + "'");
             //add some slack on the check
-            serverCheckHeartBeatTask = scheduler.scheduleDirect(() ->
-                    checkServerHeartBeat(), serverHeartbeat, TimeUnit.MILLISECONDS);
+            serverCheckHeartBeatTask = scheduler.scheduleDirect(this::checkServerHeartBeat, serverHeartbeat, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -140,7 +141,7 @@ public class HeartBeatTask {
         if (serverHeartbeat > 0) {
             final long now = System.currentTimeMillis();
             //use a forgiving boundary as some heart beats can be delayed or lost.
-            final long boundary = now - (3 * serverHeartbeat);
+            final long boundary = now - (3L * serverHeartbeat);
             //we need to check because the task could failed to abort
             if (lastServerHeartBeat < boundary) {
                 Log.d(TAG, "It's a sad day ;( Server didn't send heart-beat on time. Last received at '" + lastServerHeartBeat + "' and now is '" + now + "'");
@@ -149,16 +150,16 @@ public class HeartBeatTask {
                 }
             } else {
                 Log.d(TAG, "We were checking and server sent heart-beat on time. So well-behaved :)");
-                lastServerHeartBeat = System.currentTimeMillis();
+//                lastServerHeartBeat = System.currentTimeMillis();
             }
         }
+        abortServerHeartBeatCheck();
     }
 
     /**
      * Used to abort the server heart-beat check.
      */
     private void abortServerHeartBeatCheck() {
-        lastServerHeartBeat = System.currentTimeMillis();
         Log.d(TAG, "Aborted last check because server sent heart-beat on time ('" + lastServerHeartBeat + "'). So well-behaved :)");
         if (serverCheckHeartBeatTask != null) {
             serverCheckHeartBeatTask.dispose();
@@ -172,8 +173,7 @@ public class HeartBeatTask {
     private void scheduleClientHeartBeat() {
         if (clientHeartbeat > 0 && scheduler != null) {
             Log.d(TAG, "Scheduling client heart-beat to be sent in " + clientHeartbeat + " ms");
-            clientSendHeartBeatTask = scheduler.scheduleDirect(() ->
-                    sendClientHeartBeat(), clientHeartbeat, TimeUnit.MILLISECONDS);
+            clientSendHeartBeatTask = scheduler.scheduleDirect(this::sendClientHeartBeat, clientHeartbeat, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -184,7 +184,7 @@ public class HeartBeatTask {
         sendCallback.sendClientHeartBeat("\r\n");
         Log.d(TAG, "PING >>>");
         //schedule next client heart beat
-        this.scheduleClientHeartBeat();
+        abortClientHeartBeatSend();
     }
 
     /**
